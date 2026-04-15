@@ -1,0 +1,504 @@
+import React, { useState, useEffect } from "react";
+import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon } from "lucide-react";
+import { fetchRepoInfo, fetchRepoLanguages, fetchRepoContents, fetchReadme, fetchIssues, RepoInfo, Issue } from "./services/github";
+import { analyzeRepo, RepoAnalysis } from "./services/gemini";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
+import { cn } from "./lib/utils";
+
+interface AppData {
+  info: RepoInfo;
+  languages: Record<string, number>;
+  contents: string[];
+  issues: Issue[];
+  analysis: RepoAnalysis;
+}
+
+export default function App() {
+  const [repoUrl, setRepoUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [data, setData] = useState<AppData | null>(null);
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const handleAnalyze = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!repoUrl.trim()) return;
+    
+    setLoading(true);
+    setError("");
+    setData(null);
+
+    try {
+      let owner = "";
+      let repo = "";
+      const cleanUrl = repoUrl.trim().replace(/\/$/, "");
+      
+      if (cleanUrl.includes("github.com/")) {
+        const parts = cleanUrl.split("github.com/")[1].split("/");
+        owner = parts[0];
+        repo = parts[1];
+      } else if (cleanUrl.includes("/")) {
+        const parts = cleanUrl.split("/");
+        owner = parts[0];
+        repo = parts[1];
+      } else {
+        throw new Error("Invalid format. Use owner/repo or a GitHub URL.");
+      }
+
+      if (!owner || !repo) throw new Error("Could not parse owner and repository name.");
+
+      const info = await fetchRepoInfo(owner, repo);
+      const languages = await fetchRepoLanguages(owner, repo);
+      const contents = await fetchRepoContents(owner, repo);
+      const readme = await fetchReadme(owner, repo);
+      const issues = await fetchIssues(owner, repo);
+      const analysis = await analyzeRepo(info.description, languages, readme);
+
+      setData({ info, languages, contents, issues, analysis });
+      setActiveTab("Overview");
+    } catch (err: any) {
+      setError(err.message || "An error occurred during analysis.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const tabs = ["Overview", "Code Analysis", "Maintainability", "Issue Tracker", "Settings"];
+
+  return (
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] font-sans flex transition-colors duration-200">
+      <aside className="w-[260px] bg-[var(--surface)] border-r border-[var(--border)] py-8 px-6 flex-col hidden md:flex shrink-0 sticky top-0 h-screen transition-colors duration-200">
+        <div className="font-bold text-xl tracking-tight mb-10 flex items-center gap-2">
+          <Github className="w-6 h-6" />
+          RepoIntel.
+        </div>
+        <ul className="space-y-2">
+          {tabs.map(tab => (
+            <li
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors",
+                activeTab === tab
+                  ? "bg-[var(--surface-active)] text-[var(--accent)]"
+                  : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
+              )}
+            >
+              {tab}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-auto flex items-center justify-between">
+          <div className="text-xs text-[var(--text-muted)]">v2.4.0 Updated Today</div>
+          <button onClick={() => setTheme(theme === "light" ? "dark" : "light")} className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition-colors">
+            {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col min-w-0">
+        <header className="px-10 py-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 md:hidden">
+            <Github className="w-6 h-6" />
+            <span className="font-bold text-xl">RepoIntel.</span>
+          </div>
+          
+          <form onSubmit={handleAnalyze} className="flex-1 max-w-2xl flex gap-2 w-full">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                placeholder="e.g., facebook/react or https://github.com/facebook/react"
+                className="w-full pl-9 pr-4 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all outline-none text-sm text-[var(--text-main)]"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              {loading ? "Scanning..." : "Re-Scan Repository"}
+            </button>
+          </form>
+        </header>
+
+        <div className="px-10 pb-10 flex-1 flex flex-col">
+          {error && (
+            <div className="bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-400 px-4 py-3 rounded-lg flex items-center gap-2 mb-6 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {!data && !loading && !error && activeTab !== "Settings" && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--surface)] border border-[var(--border)] mb-4 shadow-sm">
+                <Activity className="w-6 h-6 text-[var(--text-muted)]" />
+              </div>
+              <h2 className="text-xl font-semibold text-[var(--text-main)] mb-2">Analyze any GitHub Repository</h2>
+              <p className="text-[var(--text-muted)] text-sm max-w-md mx-auto">
+                Enter a repository URL to get AI-powered insights on code quality, complexity, recommended files, and issue distribution.
+              </p>
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex-1 flex flex-col items-center justify-center py-20 gap-4">
+              <div className="w-8 h-8 border-2 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin"></div>
+              <p className="text-[var(--text-muted)] text-sm font-medium animate-pulse">Analyzing repository with Gemini AI...</p>
+            </div>
+          )}
+
+          {data && activeTab !== "Settings" && (
+            <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+              <div className="flex items-center gap-4 mb-2">
+                <img src={data.info.owner.avatar_url} alt={data.info.owner.login} className="w-12 h-12 rounded-lg border border-[var(--border)]" />
+                <div>
+                  <h1 className="text-2xl font-semibold text-[var(--text-main)] flex items-center gap-2">
+                    {data.info.owner.login}/{data.info.name}
+                    <a href={`https://github.com/${data.info.owner.login}/${data.info.name}`} target="_blank" rel="noreferrer" className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </h1>
+                  <p className="text-sm text-[var(--text-muted)]">{data.info.description}</p>
+                </div>
+              </div>
+
+              {activeTab === "Overview" && <OverviewTab data={data} />}
+              {activeTab === "Code Analysis" && <CodeAnalysisTab data={data} />}
+              {activeTab === "Maintainability" && <MaintainabilityTab data={data} />}
+              {activeTab === "Issue Tracker" && <IssueTrackerTab data={data} />}
+            </div>
+          )}
+
+          {activeTab === "Settings" && <SettingsTab theme={theme} setTheme={setTheme} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function OverviewTab({ data }: { data: AppData }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <StatCard label="Stars" value={data.info.stargazers_count.toLocaleString()} />
+        <StatCard label="Forks" value={data.info.forks_count.toLocaleString()} />
+        <StatCard label="Watchers" value={data.info.watchers_count.toLocaleString()} />
+        <StatCard label="Open Issues" value={data.info.open_issues_count.toLocaleString()} />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Repository Summary</div>
+          <p className="text-sm text-[var(--text-main)] leading-relaxed">{data.analysis.summary}</p>
+        </div>
+        <LanguageDistributionChart languages={data.languages} />
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string, value: string | number }) {
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2">{label}</div>
+      <div className="text-2xl font-bold text-[var(--text-main)]">{value}</div>
+    </div>
+  );
+}
+
+function CodeAnalysisTab({ data }: { data: AppData }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">AI Code Quality Analysis</div>
+        <p className="text-sm text-[var(--text-main)] leading-relaxed mb-6">{data.analysis.summary}</p>
+        
+        <div className="grid sm:grid-cols-2 gap-6">
+          <div>
+            <h4 className="text-xs uppercase tracking-wider text-[var(--success)] font-semibold mb-3 flex items-center gap-2">
+              Strengths
+            </h4>
+            <ul className="space-y-2">
+              {data.analysis.strengths.map((s, i) => (
+                <li key={i} className="text-sm text-[var(--text-muted)] flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--success)] mt-1.5 shrink-0"></div>
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs uppercase tracking-wider text-[var(--warning)] font-semibold mb-3 flex items-center gap-2">
+              Areas for Improvement
+            </h4>
+            <ul className="space-y-2">
+              {data.analysis.weaknesses.map((w, i) => (
+                <li key={i} className="text-sm text-[var(--text-muted)] flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--warning)] mt-1.5 shrink-0"></div>
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MaintainabilityTab({ data }: { data: AppData }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Complexity Radar</div>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={[
+              { subject: 'Readability', A: data.analysis.complexityScores.readability, fullMark: 10 },
+              { subject: 'Modularity', A: data.analysis.complexityScores.modularity, fullMark: 10 },
+              { subject: 'Testability', A: data.analysis.complexityScores.testability, fullMark: 10 },
+              { subject: 'Docs', A: data.analysis.complexityScores.documentation, fullMark: 10 },
+              { subject: 'Architecture', A: data.analysis.complexityScores.architecture, fullMark: 10 },
+            ]}>
+              <PolarGrid stroke="var(--border)" />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+              <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+              <Radar name="Score" dataKey="A" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.4} />
+              <RechartsTooltip contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <Checklist contents={data.contents} />
+    </div>
+  );
+}
+
+function IssueTrackerTab({ data }: { data: AppData }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2">
+        <IssueSection issues={data.issues} />
+      </div>
+      <div>
+        <IssueDistributionChart issues={data.issues} />
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ theme, setTheme }: { theme: string, setTheme: (t: "light" | "dark") => void }) {
+  return (
+    <div className="max-w-2xl animate-in fade-in duration-500">
+      <h2 className="text-2xl font-semibold text-[var(--text-main)] mb-6">Settings</h2>
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 space-y-6">
+        <div>
+          <h3 className="text-sm font-medium text-[var(--text-main)] mb-4">Appearance</h3>
+          <div className="flex items-center justify-between py-3 border-b border-[var(--border)]">
+            <div>
+              <div className="text-sm font-medium text-[var(--text-main)]">Theme</div>
+              <div className="text-xs text-[var(--text-muted)]">Switch between light and dark mode.</div>
+            </div>
+            <div className="flex bg-[var(--bg)] border border-[var(--border)] rounded-lg p-1">
+              <button 
+                onClick={() => setTheme("light")}
+                className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2", theme === "light" ? "bg-[var(--surface)] text-[var(--text-main)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-main)]")}
+              >
+                <Sun className="w-3.5 h-3.5" /> Light
+              </button>
+              <button 
+                onClick={() => setTheme("dark")}
+                className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2", theme === "dark" ? "bg-[var(--surface)] text-[var(--text-main)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-main)]")}
+              >
+                <Moon className="w-3.5 h-3.5" /> Dark
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LanguageDistributionChart({ languages }: { languages: Record<string, number> }) {
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Language Distribution</div>
+      <div className="h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={Object.entries(languages).map(([name, value]) => ({ name, value: Number(value) })).sort((a,b) => b.value - a.value).slice(0, 5)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <XAxis type="number" hide />
+            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={80} />
+            <RechartsTooltip cursor={{fill: 'var(--surface-hover)'}} formatter={(value: number) => value.toLocaleString() + ' bytes'} contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
+            <Bar dataKey="value" fill="var(--text-main)" radius={[0, 4, 4, 0]} barSize={16} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function IssueDistributionChart({ issues }: { issues: Issue[] }) {
+  const labelCounts: Record<string, number> = {};
+  issues.forEach(issue => {
+    if (issue.labels.length === 0) {
+      labelCounts["unlabeled"] = (labelCounts["unlabeled"] || 0) + 1;
+    } else {
+      issue.labels.forEach(label => {
+        labelCounts[label.name] = (labelCounts[label.name] || 0) + 1;
+      });
+    }
+  });
+
+  const data = Object.entries(labelCounts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Issue Distribution</div>
+      <div className="h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+            <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <RechartsTooltip cursor={{fill: 'var(--surface-hover)'}} contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
+            <Bar dataKey="value" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function Checklist({ contents }: { contents: string[] }) {
+  const recommendedFiles = [
+    { name: "README.md", desc: "Project documentation", match: (c: string[]) => c.some(f => f.startsWith("readme")) },
+    { name: "LICENSE", desc: "Usage rights", match: (c: string[]) => c.some(f => f.startsWith("license")) },
+    { name: "CONTRIBUTING.md", desc: "Contribution guidelines", match: (c: string[]) => c.some(f => f.startsWith("contributing")) },
+    { name: "CODE_OF_CONDUCT.md", desc: "Community standards", match: (c: string[]) => c.some(f => f.startsWith("code_of_conduct")) },
+    { name: ".gitignore", desc: "Ignored files config", match: (c: string[]) => c.includes(".gitignore") },
+  ];
+
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Repository Health</div>
+      <div className="flex flex-col">
+        {recommendedFiles.map((file, i) => {
+          const exists = file.match(contents);
+          return (
+            <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[var(--border)] last:border-0 text-sm">
+              <div className={cn("w-2 h-2 rounded-full shrink-0", exists ? "bg-[var(--success)]" : "bg-[var(--border)]")}></div>
+              <span className={cn(exists ? "text-[var(--text-main)]" : "text-[var(--text-muted)]")}>
+                {file.name} {exists ? "present" : "missing"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function IssueSection({ issues }: { issues: Issue[] }) {
+  const [filter, setFilter] = useState<"all" | "good-first-issue" | "easy" | "hard">("all");
+
+  const filteredIssues = issues.filter(issue => {
+    if (filter === "all") return true;
+    const labels = issue.labels.map(l => l.name.toLowerCase());
+    
+    if (filter === "good-first-issue") {
+      return labels.some(l => l.includes("good first issue"));
+    }
+    if (filter === "easy") {
+      return labels.some(l => l.includes("easy") || l.includes("beginner") || l.includes("good first issue"));
+    }
+    if (filter === "hard") {
+      return labels.some(l => l.includes("hard") || l.includes("complex") || l.includes("help wanted"));
+    }
+    return true;
+  });
+
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold m-0">Issue Explorer</div>
+        <div className="flex flex-wrap gap-2">
+          {(["all", "good-first-issue", "easy", "hard"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "px-3 py-1.5 border rounded-md text-xs font-medium cursor-pointer transition-colors",
+                filter === f 
+                  ? "bg-[var(--text-main)] text-[var(--surface)] border-[var(--text-main)]" 
+                  : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:bg-[var(--surface-hover)]"
+              )}
+            >
+              {f === "all" ? "All" : f.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+        {filteredIssues.length === 0 ? (
+          <div className="text-center py-8 text-[var(--text-muted)] text-sm">
+            No issues found for this filter.
+          </div>
+        ) : (
+          filteredIssues.map(issue => (
+            <a
+              key={issue.id}
+              href={issue.html_url}
+              target="_blank"
+              rel="noreferrer"
+              className="p-3 bg-[var(--bg)] rounded-lg text-sm block hover:bg-[var(--surface-hover)] transition-colors border border-transparent hover:border-[var(--border)]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <strong className="text-[var(--text-main)] mr-1">#{issue.number}</strong> 
+                  <span className="text-[var(--text-main)]">{issue.title}</span>
+                  {issue.labels.length > 0 && (
+                    <span className="inline-flex flex-wrap gap-1.5 ml-2">
+                      {issue.labels.map(label => {
+                        const isEasy = label.name.toLowerCase().includes("easy") || label.name.toLowerCase().includes("good first issue");
+                        const isHard = label.name.toLowerCase().includes("hard") || label.name.toLowerCase().includes("complex");
+                        return (
+                          <span
+                            key={label.name}
+                            className={cn(
+                              "inline-block px-2 py-0.5 rounded text-[0.7rem] font-semibold",
+                              isEasy ? "bg-[var(--tag-easy-bg)] text-[var(--tag-easy-text)]" :
+                              isHard ? "bg-[var(--tag-hard-bg)] text-[var(--tag-hard-text)]" :
+                              "bg-[var(--border)] text-[var(--text-muted)]"
+                            )}
+                          >
+                            {label.name}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </a>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
