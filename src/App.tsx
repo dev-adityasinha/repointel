@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon } from "lucide-react";
+import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon, MessageCircle } from "lucide-react";
 import { fetchRepoInfo, fetchRepoLanguages, fetchRepoContents, fetchReadme, fetchIssues, RepoInfo, Issue } from "./services/github";
 import { analyzeRepo, RepoAnalysis } from "./services/gemini";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import { cn } from "./lib/utils";
+import Chatbot from "./components/Chatbot";
 
 interface AppData {
   info: RepoInfo;
@@ -20,6 +21,7 @@ export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [activeTab, setActiveTab] = useState("Overview");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [chatbotOpen, setChatbotOpen] = useState(false);
 
   useEffect(() => {
     if (theme === "dark") {
@@ -105,31 +107,41 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="px-10 py-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <header className="px-10 py-8 flex flex-col md:flex-row gitmd:items-center justify-between gap-4">
           <div className="flex items-center gap-2 md:hidden">
             <Github className="w-6 h-6" />
             <span className="font-bold text-xl">RepoIntel.</span>
           </div>
           
-          <form onSubmit={handleAnalyze} className="flex-1 max-w-2xl flex gap-2 w-full">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder="e.g., facebook/react or https://github.com/facebook/react"
-                className="w-full pl-9 pr-4 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all outline-none text-sm text-[var(--text-main)]"
-              />
-            </div>
+          <div className="flex items-center gap-3 flex-1">
+            <form onSubmit={handleAnalyze} className="flex-1 max-w-2xl flex gap-2 w-full">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input
+                  type="text"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  placeholder="e.g., facebook/react or https://github.com/facebook/react"
+                  className="w-full pl-9 pr-4 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all outline-none text-sm text-[var(--text-main)]"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-5 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                {loading ? "Scanning..." : "Re-Scan Repository"}
+              </button>
+            </form>
             <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              onClick={() => setChatbotOpen(!chatbotOpen)}
+              title="Chat with AI"
+              disabled={!data}
+              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
-              {loading ? "Scanning..." : "Re-Scan Repository"}
+              <MessageCircle className="w-6 h-6" />
             </button>
-          </form>
+          </div>
         </header>
 
         <div className="px-10 pb-10 flex-1 flex flex-col">
@@ -183,6 +195,30 @@ export default function App() {
 
           {activeTab === "Settings" && <SettingsTab theme={theme} setTheme={setTheme} />}
         </div>
+
+        {chatbotOpen && data && (
+          <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setChatbotOpen(false)} />
+        )}
+
+        {chatbotOpen && data && (
+          <aside className="fixed top-0 right-0 h-screen w-80 bg-[var(--surface)] border-l border-[var(--border)] z-50 flex flex-col shadow-lg md:w-96 animate-in slide-in-from-right duration-300">
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                Chat
+              </h2>
+              <button
+                onClick={() => setChatbotOpen(false)}
+                className="p-1 rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden p-4">
+              <Chatbot data={data} />
+            </div>
+          </aside>
+        )}
       </main>
     </div>
   );
@@ -340,7 +376,7 @@ function LanguageDistributionChart({ languages }: { languages: Record<string, nu
           <BarChart data={Object.entries(languages).map(([name, value]) => ({ name, value: Number(value) })).sort((a,b) => b.value - a.value).slice(0, 5)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <XAxis type="number" hide />
             <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={80} />
-            <RechartsTooltip cursor={{fill: 'var(--surface-hover)'}} formatter={(value: number) => value.toLocaleString() + ' bytes'} contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
+            <RechartsTooltip cursor={{fill: 'var(--surface-hover)'}} formatter={(value: any) => typeof value === 'number' ? value.toLocaleString() + ' bytes' : value} contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
             <Bar dataKey="value" fill="var(--text-main)" radius={[0, 4, 4, 0]} barSize={16} />
           </BarChart>
         </ResponsiveContainer>

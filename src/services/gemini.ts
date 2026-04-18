@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export interface RepoAnalysis {
   summary: string;
@@ -69,4 +69,62 @@ Provide the output in JSON format with the following structure:
   });
 
   return JSON.parse(response.text.trim());
+}
+
+export async function askRepositoryQuestion(
+  question: string,
+  repoInfo: any,
+  languages: Record<string, number>,
+  contents: string[],
+  issues: any[],
+  analysis: any
+): Promise<string> {
+  // Build repository context
+  const repoContext = `
+Repository Name: ${repoInfo.name}
+Owner: ${repoInfo.owner.login}
+Description: ${repoInfo.description || "No description"}
+Primary Languages: ${Object.keys(languages).join(", ") || "Not specified"}
+Open Issues: ${repoInfo.open_issues_count}
+Stars: ${repoInfo.stargazers_count}
+Forks: ${repoInfo.forks_count}
+
+Repository Summary: ${analysis.summary}
+Strengths: ${analysis.strengths.join(", ")}
+Areas for Improvement: ${analysis.weaknesses.join(", ")}
+
+Repository Contents: ${contents.join(", ")}
+
+Code Quality Scores:
+- Readability: ${analysis.complexityScores.readability}/10
+- Modularity: ${analysis.complexityScores.modularity}/10
+- Testability: ${analysis.complexityScores.testability}/10
+- Documentation: ${analysis.complexityScores.documentation}/10
+- Architecture: ${analysis.complexityScores.architecture}/10
+`;
+
+  const systemPrompt = `You are a helpful assistant that answers questions specifically about a GitHub repository. 
+You have access to detailed information about the repository including its structure, languages, issues, and quality analysis.
+Your responses should be focused, accurate, and relevant to the repository.
+If the question is not related to the repository, politely redirect the user to ask about the repository instead.
+Keep responses concise but informative.`;
+
+  const userPrompt = `Repository Context:
+${repoContext}
+
+User Question: ${question}
+
+Please answer the question based on the repository information provided. If you cannot answer based on the repository information, let the user know.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: systemPrompt + "\n\n" + userPrompt }]
+      }
+    ]
+  });
+
+  return response.text.trim();
 }

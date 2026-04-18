@@ -20,39 +20,89 @@ export interface Issue {
   user: { login: string; avatar_url: string };
 }
 
+const getHeaders = () => {
+  const headers: HeadersInit = {
+    "Accept": "application/vnd.github.v3+json"
+  };
+  // Add GitHub token if available in environment
+  const token = import.meta.env.VITE_GITHUB_TOKEN;
+  if (token) {
+    headers["Authorization"] = `token ${token}`;
+  }
+  return headers;
+};
+
 export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoInfo> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-  if (!res.ok) throw new Error("Repository not found or API rate limit exceeded");
-  return res.json();
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: getHeaders() });
+    
+    if (res.status === 404) {
+      throw new Error(`Repository "${owner}/${repo}" not found. Please check the repository name and try again.`);
+    }
+    
+    if (res.status === 403) {
+      const remaining = res.headers.get("x-ratelimit-remaining");
+      const reset = res.headers.get("x-ratelimit-reset");
+      if (remaining === "0") {
+        const resetDate = reset ? new Date(parseInt(reset) * 1000).toLocaleTimeString() : "unknown";
+        throw new Error(`GitHub API rate limit exceeded. Rate limit resets at ${resetDate}. Add a GitHub token to increase limits.`);
+      }
+      throw new Error("GitHub API error: Access forbidden");
+    }
+    
+    if (!res.ok) {
+      throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    }
+    
+    return res.json();
+  } catch (err: any) {
+    throw new Error(err.message || "Failed to fetch repository information");
+  }
 }
 
 export async function fetchRepoLanguages(owner: string, repo: string): Promise<Record<string, number>> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/languages`);
-  if (!res.ok) return {};
-  return res.json();
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/languages`, { headers: getHeaders() });
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
 }
 
 export async function fetchRepoContents(owner: string, repo: string): Promise<string[]> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  if (Array.isArray(data)) {
-    return data.map((item: any) => item.name.toLowerCase());
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, { headers: getHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return data.map((item: any) => item.name.toLowerCase());
+    }
+    return [];
+  } catch {
+    return [];
   }
-  return [];
 }
 
 export async function fetchReadme(owner: string, repo: string): Promise<string> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, {
-    headers: { Accept: "application/vnd.github.v3.raw" }
-  });
-  if (!res.ok) return "";
-  return res.text();
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, {
+      headers: { ...getHeaders(), Accept: "application/vnd.github.v3.raw" }
+    });
+    if (!res.ok) return "";
+    return res.text();
+  } catch {
+    return "";
+  }
 }
 
 export async function fetchIssues(owner: string, repo: string): Promise<Issue[]> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.filter((issue: any) => !issue.pull_request);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`, { headers: getHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.filter((issue: any) => !issue.pull_request);
+  } catch {
+    return [];
+  }
 }
