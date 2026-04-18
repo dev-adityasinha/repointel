@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon, MessageCircle } from "lucide-react";
+import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon, MessageCircle, Download, GitCompare, TrendingUp } from "lucide-react";
 import { fetchRepoInfo, fetchRepoLanguages, fetchRepoContents, fetchReadme, fetchIssues, RepoInfo, Issue } from "./services/github";
 import { analyzeRepo, RepoAnalysis } from "./services/gemini";
+import { exportAnalysisToPDF } from "./services/pdf";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import { cn } from "./lib/utils";
 import Chatbot from "./components/Chatbot";
+import RepositoryComparison from "./components/RepositoryComparison";
+import SearchAndTrending from "./components/SearchAndTrending";
 
 interface AppData {
   info: RepoInfo;
@@ -22,6 +25,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("Overview");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [chatbotOpen, setChatbotOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     if (theme === "dark") {
@@ -71,6 +77,27 @@ export default function App() {
       setError(err.message || "An error occurred during analysis.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSearchRepoSelect = (owner: string, repo: string) => {
+    setRepoUrl(`${owner}/${repo}`);
+    setSearchOpen(false);
+  };
+
+  const handleExportPDF = async () => {
+    if (!data) return;
+    setPdfLoading(true);
+    try {
+      const exportElement = document.getElementById("export-content");
+      if (exportElement) {
+        await exportAnalysisToPDF("export-content", `${data.info.owner.login}_${data.info.name}`, data.analysis);
+      }
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      alert("Failed to export PDF");
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -134,6 +161,28 @@ export default function App() {
               </button>
             </form>
             <button
+              onClick={() => setSearchOpen(true)}
+              title="Search & Trending"
+              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all"
+            >
+              <TrendingUp className="w-6 h-6" />
+            </button>
+            <button
+              onClick={() => setComparisonOpen(true)}
+              title="Compare Repositories"
+              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all"
+            >
+              <GitCompare className="w-6 h-6" />
+            </button>
+            <button
+              onClick={handleExportPDF}
+              title="Export to PDF"
+              disabled={!data || pdfLoading}
+              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <Download className="w-6 h-6" />
+            </button>
+            <button
               onClick={() => setChatbotOpen(!chatbotOpen)}
               title="Chat with AI"
               disabled={!data}
@@ -173,6 +222,79 @@ export default function App() {
 
           {data && activeTab !== "Settings" && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+              {/* Hidden export content for PDF */}
+              <div
+                id="export-content"
+                style={{ display: "none" }}
+                className="bg-white p-8 text-black"
+              >
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold mb-2">Repository Analysis Report</h1>
+                  <p className="text-gray-600">{data.info.owner.login}/{data.info.name}</p>
+                  <p className="text-gray-500 text-sm">{new Date().toLocaleDateString()}</p>
+                </div>
+
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold mb-2">Summary</h2>
+                  <p className="text-gray-700">{data.analysis.summary}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold mb-3">Strengths</h3>
+                    <ul className="space-y-2">
+                      {data.analysis.strengths.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-700">• {s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold mb-3">Areas for Improvement</h3>
+                    <ul className="space-y-2">
+                      {data.analysis.weaknesses.map((w, i) => (
+                        <li key={i} className="text-sm text-gray-700">• {w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold mb-3">Metrics</h3>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-2">Stars</td>
+                        <td className="py-2 font-bold">{data.info.stargazers_count.toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2">Forks</td>
+                        <td className="py-2 font-bold">{data.info.forks_count.toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2">Open Issues</td>
+                        <td className="py-2 font-bold">{data.info.open_issues_count}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2">Readability</td>
+                        <td className="py-2 font-bold">{data.analysis.complexityScores.readability}/10</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2">Modularity</td>
+                        <td className="py-2 font-bold">{data.analysis.complexityScores.modularity}/10</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2">Testability</td>
+                        <td className="py-2 font-bold">{data.analysis.complexityScores.testability}/10</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2">Documentation</td>
+                        <td className="py-2 font-bold">{data.analysis.complexityScores.documentation}/10</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div className="flex items-center gap-4 mb-2">
                 <img src={data.info.owner.avatar_url} alt={data.info.owner.login} className="w-12 h-12 rounded-lg border border-[var(--border)]" />
                 <div>
@@ -219,6 +341,29 @@ export default function App() {
             </div>
           </aside>
         )}
+
+        {/* Search & Trending Modal */}
+        {searchOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-auto">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border)] sticky top-0 bg-[var(--surface)]">
+                <h2 className="text-xl font-semibold text-[var(--text-main)]">Search & Trending</h2>
+                <button
+                  onClick={() => setSearchOpen(false)}
+                  className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                <SearchAndTrending onSelectRepo={handleSearchRepoSelect} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Repository Comparison Modal */}
+        <RepositoryComparison isOpen={comparisonOpen} onClose={() => setComparisonOpen(false)} />
       </main>
     </div>
   );
