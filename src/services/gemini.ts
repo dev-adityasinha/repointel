@@ -128,3 +128,84 @@ Please answer the question based on the repository information provided. If you 
 
   return response.text.trim();
 }
+
+export interface SmartSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  priority: "critical" | "high" | "medium" | "low";
+  codeExample: {
+    problem: string;
+    solution: string;
+    language: string;
+  };
+  impact: string;
+  effort: "quick" | "moderate" | "complex";
+}
+
+export async function getSmartSuggestions(
+  analysis: any,
+  languages: Record<string, number>,
+  readmeContent: string
+): Promise<SmartSuggestion[]> {
+  const primaryLanguage = Object.entries(languages)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || "JavaScript";
+
+  const prompt = `
+Based on the following repository analysis, provide 3 specific, actionable smart suggestions for code improvements with concrete code examples.
+
+Code Quality Analysis:
+- Readability Score: ${analysis.complexityScores.readability}/10
+- Modularity Score: ${analysis.complexityScores.modularity}/10
+- Testability Score: ${analysis.complexityScores.testability}/10
+- Documentation Score: ${analysis.complexityScores.documentation}/10
+- Architecture Score: ${analysis.complexityScores.architecture}/10
+
+Weaknesses: ${analysis.weaknesses.join(", ")}
+Primary Language: ${primaryLanguage}
+README (first 500 chars): ${readmeContent.substring(0, 500)}
+
+For each suggestion, provide:
+1. A title (short, actionable)
+2. A description explaining the issue in simple terms
+3. Priority level (critical/high/medium/low)
+4. A code example with "problem" (current bad code) and "solution" (improved code) in the primary language
+5. Impact (what will improve - e.g., "Performance +20%", "Readability +30%", etc.)
+6. Effort level (quick/moderate/complex)
+
+Return as JSON array with this structure:
+[
+  {
+    "id": "suggestion-1",
+    "title": "Add input validation",
+    "description": "...",
+    "priority": "high",
+    "codeExample": {
+      "problem": "// current code...",
+      "solution": "// improved code...",
+      "language": "${primaryLanguage}"
+    },
+    "impact": "Security +25%, Reliability +15%",
+    "effort": "quick"
+  }
+]
+
+Provide exactly 3 suggestions, ordered by priority (highest first).
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    const suggestions = JSON.parse(response.text.trim());
+    return Array.isArray(suggestions) ? suggestions.slice(0, 3) : [];
+  } catch (error) {
+    console.error("Error generating smart suggestions:", error);
+    return [];
+  }
+}

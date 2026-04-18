@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon, MessageCircle, Download, GitCompare, TrendingUp } from "lucide-react";
+import { Search, Github, Activity, FileText, AlertCircle, CheckCircle2, XCircle, Star, GitFork, Eye, ExternalLink, Sun, Moon, MessageCircle, Download, GitCompare, TrendingUp, Shield, Heart } from "lucide-react";
 import { fetchRepoInfo, fetchRepoLanguages, fetchRepoContents, fetchReadme, fetchIssues, RepoInfo, Issue } from "./services/github";
-import { analyzeRepo, RepoAnalysis } from "./services/gemini";
+import { analyzeRepo, RepoAnalysis, getSmartSuggestions, SmartSuggestion } from "./services/gemini";
 import { exportAnalysisToPDF } from "./services/pdf";
+import { performSecurityScan, SecurityScan } from "./services/security";
+import { calculateHealthScore, HealthMetrics } from "./services/health";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import { cn } from "./lib/utils";
 import Chatbot from "./components/Chatbot";
@@ -11,6 +13,9 @@ import SearchAndTrending from "./components/SearchAndTrending";
 import MaintainabilityDashboard from "./components/MaintainabilityDashboard";
 import CodeAnalysisDashboard from "./components/CodeAnalysisDashboard";
 import OverviewDashboard from "./components/OverviewDashboard";
+import SecurityDashboard from "./components/SecurityDashboard";
+import HealthScoreDashboard from "./components/HealthScoreDashboard";
+import SmartSuggestionsPanel from "./components/SmartSuggestionsPanel";
 
 interface AppData {
   info: RepoInfo;
@@ -18,6 +23,9 @@ interface AppData {
   contents: string[];
   issues: Issue[];
   analysis: RepoAnalysis;
+  security: SecurityScan;
+  health: HealthMetrics;
+  suggestions: SmartSuggestion[];
 }
 
 export default function App() {
@@ -73,8 +81,17 @@ export default function App() {
       const readme = await fetchReadme(owner, repo);
       const issues = await fetchIssues(owner, repo);
       const analysis = await analyzeRepo(info.description, languages, readme);
+      
+      // Compute security scan
+      const security = await performSecurityScan(info.description, languages, contents, readme);
+      
+      // Compute health score
+      const health = calculateHealthScore(info, analysis, security.score, issues.length, Object.keys(languages).length);
+      
+      // Get smart suggestions
+      const suggestions = await getSmartSuggestions(analysis, languages, readme);
 
-      setData({ info, languages, contents, issues, analysis });
+      setData({ info, languages, contents, issues, analysis, security, health, suggestions });
       setActiveTab("Overview");
     } catch (err: any) {
       setError(err.message || "An error occurred during analysis.");
@@ -104,7 +121,7 @@ export default function App() {
     }
   };
 
-  const tabs = ["Overview", "Code Analysis", "Maintainability", "Issue Tracker", "Settings"];
+  const tabs = ["Overview", "Code Analysis", "Security", "Health Score", "Smart Suggestions", "Maintainability", "Issue Tracker", "Settings"];
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] font-sans flex transition-colors duration-200">
@@ -313,6 +330,9 @@ export default function App() {
 
               {activeTab === "Overview" && <OverviewTab data={data} />}
               {activeTab === "Code Analysis" && <CodeAnalysisTab data={data} />}
+              {activeTab === "Security" && <SecurityDashboard securityScan={data.security} />}
+              {activeTab === "Health Score" && <HealthScoreDashboard metrics={data.health} />}
+              {activeTab === "Smart Suggestions" && <SmartSuggestionsPanel suggestions={data.suggestions} />}
               {activeTab === "Maintainability" && <MaintainabilityTab data={data} />}
               {activeTab === "Issue Tracker" && <IssueTrackerTab data={data} />}
             </div>

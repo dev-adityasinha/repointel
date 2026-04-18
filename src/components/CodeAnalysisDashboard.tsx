@@ -1,6 +1,6 @@
 import React from "react";
 import { LineChart, Line, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell, ScatterChart, Scatter } from "recharts";
-import { TrendingUp, Zap, AlertCircle, CheckCircle } from "lucide-react";
+import { TrendingUp, Zap, AlertCircle, CheckCircle, ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 
 interface RepoAnalysis {
@@ -15,6 +15,40 @@ interface RepoAnalysis {
     architecture: number;
   };
 }
+
+// Easy-to-understand explanations and examples for common improvement areas
+const improvementGuide: Record<string, { emoji: string; explanation: string; examples: string[] }> = {
+  "test": { 
+    emoji: "🧪",
+    explanation: "Tests are like safety checks for your code. They automatically verify that your code works as expected. Without them, you might miss bugs!",
+    examples: ["Example: Test that login function rejects wrong passwords", "Example: Test that shopping cart calculates total correctly", "Example: Test that API returns correct data format"]
+  },
+  "document": {
+    emoji: "📚",
+    explanation: "Documentation explains how your code works. It's like an instruction manual. People (including future you!) will understand the code much faster.",
+    examples: ["Example: Add comments explaining what a complex function does", "Example: Write a README showing how to install and use", "Example: Document function parameters and what they do"]
+  },
+  "read": {
+    emoji: "👁️",
+    explanation: "Readability means code is easy to understand at first glance. Clear variable names, proper formatting, and logical structure make it much better.",
+    examples: ["Example: Use 'userName' instead of 'un' for variable names", "Example: Break long functions into smaller, focused ones", "Example: Use consistent indentation and formatting"]
+  },
+  "modularity": {
+    emoji: "🧩",
+    explanation: "Modularity means breaking code into small, independent pieces. Each piece does one thing well. This makes code reusable and easy to fix.",
+    examples: ["Example: Instead of one 500-line file, split into 5 focused files", "Example: Create reusable functions instead of copy-pasting code", "Example: Make components that work independently"]
+  },
+  "architecture": {
+    emoji: "🏗️",
+    explanation: "Architecture is the overall structure of your code. Good architecture makes it easy to add features, fix bugs, and understand the project.",
+    examples: ["Example: Organize code by features instead of file types", "Example: Separate business logic from user interface code", "Example: Use design patterns to solve common problems"]
+  },
+  "complex": {
+    emoji: "🎯",
+    explanation: "Code complexity means the code is harder to understand. Simpler code is better! It's easier to debug and maintain.",
+    examples: ["Example: Replace nested if statements with clearer logic", "Example: Use meaningful variable names instead of cryptic ones", "Example: Add comments explaining the 'why' not just the 'what'"]
+  }
+};
 
 export default function CodeAnalysisDashboard({ analysis }: { analysis: RepoAnalysis }) {
   const scores = analysis.complexityScores;
@@ -163,12 +197,9 @@ export default function CodeAnalysisDashboard({ analysis }: { analysis: RepoAnal
               Areas for Improvement
             </h4>
           </div>
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {analysis.weaknesses.map((weakness, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-[var(--text-main)]">
-                <span className="text-amber-500 font-bold mt-0.5">!</span>
-                <span>{weakness}</span>
-              </li>
+              <ImprovementItem key={i} weakness={weakness} />
             ))}
           </ul>
         </div>
@@ -205,6 +236,75 @@ export default function CodeAnalysisDashboard({ analysis }: { analysis: RepoAnal
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Component to display expandable improvement items with explanations
+function ImprovementItem({ weakness }: { weakness: string }) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  // Find matching guide entry
+  let guide = null;
+  const weaknessLower = weakness.toLowerCase();
+  
+  for (const [key, value] of Object.entries(improvementGuide)) {
+    if (weaknessLower.includes(key)) {
+      guide = value;
+      break;
+    }
+  }
+
+  // Fallback guide if no match found
+  if (!guide) {
+    guide = {
+      emoji: "💡",
+      explanation: "This area could be improved by focusing on code quality and best practices.",
+      examples: ["Review similar projects for patterns", "Ask the community for suggestions", "Research best practices for this area"]
+    };
+  }
+
+  return (
+    <div className="text-sm">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-start gap-2 text-[var(--text-main)] hover:bg-amber-500/5 p-2 rounded-lg transition-all text-left"
+      >
+        <span className="flex-shrink-0 mt-0.5">!</span>
+        <span className="flex-1">{weakness}</span>
+        <ChevronDown className={cn("w-4 h-4 flex-shrink-0 text-amber-500 transition-transform", isOpen && "rotate-180")} />
+      </button>
+
+      {/* Expandable Content */}
+      {isOpen && (
+        <div className="mt-2 ml-6 p-3 bg-[var(--bg)] rounded-lg border border-amber-500/20 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex gap-3">
+            <span className="text-2xl flex-shrink-0">{guide.emoji}</span>
+            <div className="flex-1">
+              <p className="text-xs text-[var(--text-main)] leading-relaxed mb-3">
+                {guide.explanation}
+              </p>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase">Quick Examples:</div>
+                {guide.examples.map((example, i) => (
+                  <div key={i} className="text-xs text-[var(--text-muted)] flex gap-2">
+                    <span className="flex-shrink-0">→</span>
+                    <span>{example}</span>
+                  </div>
+                ))}
+              </div>
+              <a
+                href="https://developer.mozilla.org/docs/"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block text-xs px-3 py-1.5 bg-amber-500/20 text-amber-600 rounded hover:bg-amber-500/30 transition-colors"
+              >
+                Learn More →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
