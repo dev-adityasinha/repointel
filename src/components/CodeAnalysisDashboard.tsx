@@ -1,5 +1,5 @@
 import React from "react";
-import { LineChart, Line, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell, ScatterChart, Scatter } from "recharts";
+import { LineChart, Line, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell, ScatterChart, Scatter, PieChart, Pie } from "recharts";
 import { TrendingUp, Zap, AlertCircle, CheckCircle, ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -166,6 +166,50 @@ export default function CodeAnalysisDashboard({ analysis }: { analysis: RepoAnal
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* Score Distribution Donut Chart */}
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">
+          Score Distribution
+        </div>
+        <div className="h-[300px] flex items-center justify-center">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={barData}
+                cx="50%"
+                cy="50%"
+                innerRadius={80}
+                outerRadius={110}
+                paddingAngle={2}
+                dataKey="value"
+              >
+                {barData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <RechartsTooltip
+                contentStyle={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-main)"
+                }}
+                formatter={(value) => [`${value}/10`, "Score"]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Legend */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-6">
+          {barData.map((item) => (
+            <div key={item.name} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
+              <span className="text-xs text-[var(--text-muted)]">{item.name}</span>
+            </div>
+          ))}
         </div>
       </div>
 
