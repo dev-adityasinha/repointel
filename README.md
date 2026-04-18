@@ -295,25 +295,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ---
 
-## 🙏 Acknowledgments
 
-- **Google Gemini AI** for powerful code analysis
-- **GitHub API** for repository data
-- **React & Vite** for excellent development experience
-- **Tailwind CSS** for beautiful styling
-- **Recharts** for stunning visualizations
 
----
 
-## 📞 Support
 
-- 📧 Email: support@repointel.dev
-- 🐛 Report Issues: [GitHub Issues](https://github.com/yourusername/repointel/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/repointel/discussions)
-
----
-
-<div align="center">
-  <strong>Made with ❤️ for developers, by developers</strong><br>
-  <sub>Analyzing code. Improving quality. Empowering developers.</sub>
-</div>
