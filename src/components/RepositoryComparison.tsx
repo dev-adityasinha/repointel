@@ -209,8 +209,61 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
           {/* Comparison Results */}
           {repos.every(r => r !== null) && repos.length > 0 && (() => {
             const loadedRepos = repos.filter((r): r is ComparisonRepo => r !== null);
+            
+            // Calculate rankings based on overall quality
+            const rankedRepos = [...loadedRepos]
+              .map((repo, idx) => ({
+                repo,
+                score: calculateOverallQuality(repo.analysis),
+                originalIndex: idx
+              }))
+              .sort((a, b) => b.score - a.score);
+
             return (
               <div className="space-y-6">
+                {/* Overall Rankings Section - Only show for 3+ repositories */}
+                {loadedRepos.length > 2 && (
+                  <div className="bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30 rounded-xl p-6 mb-8">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">🎖️ Overall Rankings</h3>
+                    <div className="grid gap-3">
+                      {rankedRepos.map((item, rank) => {
+                        const medalEmoji = rank === 0 ? "🥇" : rank === 1 ? "🥈" : rank === 2 ? "🥉" : `#${rank + 1}`;
+                        return (
+                          <div
+                            key={item.originalIndex}
+                            className={cn(
+                              "flex items-center justify-between p-4 rounded-lg border-2",
+                              rank === 0
+                                ? "bg-yellow-500/10 border-yellow-500"
+                                : rank === 1
+                                ? "bg-gray-300/10 border-gray-400"
+                                : rank === 2
+                                ? "bg-orange-500/10 border-orange-500"
+                                : "bg-[var(--surface)] border-[var(--border)]"
+                            )}
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="text-3xl font-bold">{medalEmoji}</span>
+                              <div>
+                                <div className="font-bold text-[var(--text-main)]">
+                                  {rank === 0 ? "1st Place" : rank === 1 ? "2nd Place" : rank === 2 ? "3rd Place" : `${rank + 1}th Place`}
+                                </div>
+                                <div className="text-sm text-[var(--text-muted)]">
+                                  {item.repo.info.owner.login}/{item.repo.info.name}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-[var(--accent)]">{item.score}</div>
+                              <div className="text-xs text-[var(--text-muted)]">/ 10</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Winner Badge - Code Quality Focused */}
                 <div className="bg-gradient-to-r from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded-xl p-6 mb-8">
                   <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">🏆 Code Quality Winners</h3>
