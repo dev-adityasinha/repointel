@@ -8,6 +8,9 @@ import { cn } from "./lib/utils";
 import Chatbot from "./components/Chatbot";
 import RepositoryComparison from "./components/RepositoryComparison";
 import SearchAndTrending from "./components/SearchAndTrending";
+import MaintainabilityDashboard from "./components/MaintainabilityDashboard";
+import CodeAnalysisDashboard from "./components/CodeAnalysisDashboard";
+import OverviewDashboard from "./components/OverviewDashboard";
 
 interface AppData {
   info: RepoInfo;
@@ -370,23 +373,7 @@ export default function App() {
 }
 
 function OverviewTab({ data }: { data: AppData }) {
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-        <StatCard label="Stars" value={data.info.stargazers_count.toLocaleString()} />
-        <StatCard label="Forks" value={data.info.forks_count.toLocaleString()} />
-        <StatCard label="Watchers" value={data.info.watchers_count.toLocaleString()} />
-        <StatCard label="Open Issues" value={data.info.open_issues_count.toLocaleString()} />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-          <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Repository Summary</div>
-          <p className="text-sm text-[var(--text-main)] leading-relaxed">{data.analysis.summary}</p>
-        </div>
-        <LanguageDistributionChart languages={data.languages} />
-      </div>
-    </div>
-  );
+  return <OverviewDashboard data={data} />;
 }
 
 function StatCard({ label, value }: { label: string, value: string | number }) {
@@ -399,81 +386,108 @@ function StatCard({ label, value }: { label: string, value: string | number }) {
 }
 
 function CodeAnalysisTab({ data }: { data: AppData }) {
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">AI Code Quality Analysis</div>
-        <p className="text-sm text-[var(--text-main)] leading-relaxed mb-6">{data.analysis.summary}</p>
-        
-        <div className="grid sm:grid-cols-2 gap-6">
-          <div>
-            <h4 className="text-xs uppercase tracking-wider text-[var(--success)] font-semibold mb-3 flex items-center gap-2">
-              Strengths
-            </h4>
-            <ul className="space-y-2">
-              {data.analysis.strengths.map((s, i) => (
-                <li key={i} className="text-sm text-[var(--text-muted)] flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--success)] mt-1.5 shrink-0"></div>
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-xs uppercase tracking-wider text-[var(--warning)] font-semibold mb-3 flex items-center gap-2">
-              Areas for Improvement
-            </h4>
-            <ul className="space-y-2">
-              {data.analysis.weaknesses.map((w, i) => (
-                <li key={i} className="text-sm text-[var(--text-muted)] flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--warning)] mt-1.5 shrink-0"></div>
-                  {w}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <CodeAnalysisDashboard analysis={data.analysis} />;
 }
 
 function MaintainabilityTab({ data }: { data: AppData }) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Complexity Radar</div>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={[
-              { subject: 'Readability', A: data.analysis.complexityScores.readability, fullMark: 10 },
-              { subject: 'Modularity', A: data.analysis.complexityScores.modularity, fullMark: 10 },
-              { subject: 'Testability', A: data.analysis.complexityScores.testability, fullMark: 10 },
-              { subject: 'Docs', A: data.analysis.complexityScores.documentation, fullMark: 10 },
-              { subject: 'Architecture', A: data.analysis.complexityScores.architecture, fullMark: 10 },
-            ]}>
-              <PolarGrid stroke="var(--border)" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-              <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-              <Radar name="Score" dataKey="A" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.4} />
-              <RechartsTooltip contentStyle={{ backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-main)' }} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      <Checklist contents={data.contents} />
-    </div>
-  );
+  return <MaintainabilityDashboard data={data} />;
 }
 
 function IssueTrackerTab({ data }: { data: AppData }) {
+  const [showContributeMenu, setShowContributeMenu] = React.useState(false);
+  const contributeMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (contributeMenuRef.current && !contributeMenuRef.current.contains(event.target as Node)) {
+        setShowContributeMenu(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const repoUrl = `${data.info.owner.login}/${data.info.name}`;
+  const newIssueUrl = `https://github.com/${repoUrl}/issues/new`;
+  const newPRUrl = `https://github.com/${repoUrl}/compare`;
+  const forkUrl = `https://github.com/${repoUrl}/fork`;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2">
-        <IssueSection issues={data.issues} />
+    <div className="flex flex-col gap-6">
+      {/* Contribute Section */}
+      <div className="bg-gradient-to-r from-[var(--accent)]/20 to-[var(--accent)]/5 border border-[var(--accent)]/30 rounded-xl p-5 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-[var(--text-main)] mb-1">Want to help?</h3>
+          <p className="text-xs text-[var(--text-muted)]">Found a bug or have an idea? Contribute to this project!</p>
+        </div>
+        <div className="relative" ref={contributeMenuRef}>
+          <button
+            onClick={() => setShowContributeMenu(!showContributeMenu)}
+            className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors font-medium text-sm flex items-center gap-2 whitespace-nowrap"
+          >
+            <span>+ Contribute</span>
+            <span className={`transition-transform ${showContributeMenu ? "rotate-180" : ""}`}>▼</span>
+          </button>
+
+          {/* Dropdown Menu */}
+          {showContributeMenu && (
+            <div className="absolute right-0 mt-2 w-56 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              <a
+                href={newIssueUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowContributeMenu(false)}
+                className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--bg)] transition-colors border-b border-[var(--border)] last:border-0"
+              >
+                <span className="text-lg mt-0.5">🐛</span>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-main)]">Report an Issue</div>
+                  <div className="text-xs text-[var(--text-muted)]">Found a bug? Let the maintainers know</div>
+                </div>
+              </a>
+
+              <a
+                href={newPRUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowContributeMenu(false)}
+                className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--bg)] transition-colors border-b border-[var(--border)] last:border-0"
+              >
+                <span className="text-lg mt-0.5">🔀</span>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-main)]">Submit a Pull Request</div>
+                  <div className="text-xs text-[var(--text-muted)]">Have a fix or feature? Submit your code</div>
+                </div>
+              </a>
+
+              <a
+                href={forkUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowContributeMenu(false)}
+                className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--bg)] transition-colors"
+              >
+                <span className="text-lg mt-0.5">🍴</span>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-main)]">Fork the Repository</div>
+                  <div className="text-xs text-[var(--text-muted)]">Create your own copy to make changes</div>
+                </div>
+              </a>
+            </div>
+          )}
+        </div>
       </div>
-      <div>
-        <IssueDistributionChart issues={data.issues} />
+
+      {/* Issues Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <IssueSection issues={data.issues} />
+        </div>
+        <div>
+          <IssueDistributionChart issues={data.issues} />
+        </div>
       </div>
     </div>
   );
