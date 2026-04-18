@@ -98,7 +98,6 @@ export default function App() {
           ))}
         </ul>
         <div className="mt-auto flex items-center justify-between">
-          <div className="text-xs text-[var(--text-muted)]">v2.4.0 Updated Today</div>
           <button onClick={() => setTheme(theme === "light" ? "dark" : "light")} className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition-colors">
             {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
           </button>
