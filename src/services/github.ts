@@ -35,11 +35,11 @@ const getHeaders = () => {
 export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoInfo> {
   try {
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: getHeaders() });
-    
+
     if (res.status === 404) {
       throw new Error(`Repository "${owner}/${repo}" not found. Please check the repository name and try again.`);
     }
-    
+
     if (res.status === 403) {
       const remaining = res.headers.get("x-ratelimit-remaining");
       const reset = res.headers.get("x-ratelimit-reset");
@@ -49,11 +49,11 @@ export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoIn
       }
       throw new Error("GitHub API error: Access forbidden");
     }
-    
+
     if (!res.ok) {
       throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
     }
-    
+
     return res.json();
   } catch (err: any) {
     throw new Error(err.message || "Failed to fetch repository information");
@@ -84,7 +84,7 @@ export async function fetchRepoContents(owner: string, repo: string): Promise<st
         '.DS_Store', 'Thumbs.db',
         '.next', 'dist', 'build', 'out'
       ]);
-      
+
       return data
         .map((item: any) => item.name.toLowerCase())
         .filter((name: string) => !excludedNames.has(name));
