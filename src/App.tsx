@@ -414,50 +414,91 @@ function Checklist({ contents }: { contents: string[] }) {
 }
 
 function IssueSection({ issues }: { issues: Issue[] }) {
-  const [filter, setFilter] = useState<"all" | "good-first-issue" | "easy" | "hard">("all");
+  const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
 
-  const filteredIssues = issues.filter(issue => {
-    if (filter === "all") return true;
-    const labels = issue.labels.map(l => l.name.toLowerCase());
-    
-    if (filter === "good-first-issue") {
-      return labels.some(l => l.includes("good first issue"));
-    }
-    if (filter === "easy") {
-      return labels.some(l => l.includes("easy") || l.includes("beginner") || l.includes("good first issue"));
-    }
-    if (filter === "hard") {
-      return labels.some(l => l.includes("hard") || l.includes("complex") || l.includes("help wanted"));
-    }
-    return true;
+  // Extract all unique labels with counts
+  const labelCounts = new Map<string, { color: string; count: number }>();
+  issues.forEach(issue => {
+    issue.labels.forEach(label => {
+      const current = labelCounts.get(label.name) || { color: label.color, count: 0 };
+      labelCounts.set(label.name, { ...current, count: current.count + 1 });
+    });
   });
+
+  const sortedLabels = Array.from(labelCounts.entries())
+    .sort((a, b) => b[1].count - a[1].count);
+
+  // Filter issues based on selected labels
+  const filteredIssues = selectedLabels.size === 0 
+    ? issues 
+    : issues.filter(issue => 
+        issue.labels.some(label => selectedLabels.has(label.name))
+      );
+
+  const toggleLabel = (labelName: string) => {
+    const newSelected = new Set(selectedLabels);
+    if (newSelected.has(labelName)) {
+      newSelected.delete(labelName);
+    } else {
+      newSelected.add(labelName);
+    }
+    setSelectedLabels(newSelected);
+  };
 
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold m-0">Issue Explorer</div>
-        <div className="flex flex-wrap gap-2">
-          {(["all", "good-first-issue", "easy", "hard"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "px-3 py-1.5 border rounded-md text-xs font-medium cursor-pointer transition-colors",
-                filter === f 
-                  ? "bg-[var(--text-main)] text-[var(--surface)] border-[var(--text-main)]" 
-                  : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:bg-[var(--surface-hover)]"
-              )}
-            >
-              {f === "all" ? "All" : f.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-            </button>
-          ))}
+      <div className="mb-4">
+        <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Issue Explorer</div>
+        
+        {/* Filter Labels Section */}
+        <div className="mb-4">
+          <div className="text-xs text-[var(--text-muted)] font-medium mb-2">Filter by label:</div>
+          <div className="flex flex-wrap gap-2">
+            {sortedLabels.map(([labelName, { color, count }]) => {
+              const isSelected = selectedLabels.has(labelName);
+              return (
+                <button
+                  key={labelName}
+                  onClick={() => toggleLabel(labelName)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all border-2 flex items-center gap-1.5",
+                    isSelected 
+                      ? "border-[#" + color + "] bg-[#" + color + "20] text-[#" + color + "]" 
+                      : "border-[var(--border)] bg-[var(--bg)] text-[var(--text-muted)] hover:border-[var(--border-hover)]"
+                  )}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#" + color }}></span>
+                  {labelName}
+                  <span className="text-xs opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          
+          {/* Clear filters button */}
+          {selectedLabels.size > 0 && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => setSelectedLabels(new Set())}
+                className="text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] font-medium transition-colors"
+              >
+                Clear all filters
+              </button>
+              <span className="text-xs text-[var(--text-muted)]">
+                ({selectedLabels.size} filter{selectedLabels.size !== 1 ? "s" : ""} applied)
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Issues List */}
       <div className="flex flex-col gap-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
         {filteredIssues.length === 0 ? (
           <div className="text-center py-8 text-[var(--text-muted)] text-sm">
-            No issues found for this filter.
+            {selectedLabels.size > 0 
+              ? "No issues found matching the selected filter" + (selectedLabels.size > 1 ? "s" : "") + "."
+              : "No issues available."}
           </div>
         ) : (
           filteredIssues.map(issue => (
@@ -475,6 +516,7 @@ function IssueSection({ issues }: { issues: Issue[] }) {
                   {issue.labels.length > 0 && (
                     <span className="inline-flex flex-wrap gap-1.5 ml-2">
                       {issue.labels.map(label => {
+                        const isSelected = selectedLabels.has(label.name);
                         const isEasy = label.name.toLowerCase().includes("easy") || label.name.toLowerCase().includes("good first issue");
                         const isHard = label.name.toLowerCase().includes("hard") || label.name.toLowerCase().includes("complex");
                         return (
@@ -482,6 +524,7 @@ function IssueSection({ issues }: { issues: Issue[] }) {
                             key={label.name}
                             className={cn(
                               "inline-block px-2 py-0.5 rounded text-[0.7rem] font-semibold",
+                              isSelected ? "ring-1 ring-[#" + label.color + "]" : "",
                               isEasy ? "bg-[var(--tag-easy-bg)] text-[var(--tag-easy-text)]" :
                               isHard ? "bg-[var(--tag-hard-bg)] text-[var(--tag-hard-text)]" :
                               "bg-[var(--border)] text-[var(--text-muted)]"
