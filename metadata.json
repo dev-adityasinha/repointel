@@ -1,6 +1,16 @@
 {
-  "name": "",
-  "description": "",
+  "name": "RepoIntel - AI-Powered GitHub Repository Analyzer",
+  "description": "An intelligent GitHub repository analyzer that uses AI to provide comprehensive code quality metrics, security scanning, health scoring, and smart suggestions. Perfect for code review, assignment evaluation, and repository comparison.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "Repository Analysis with AI",
+    "Code Quality Metrics",
+    "Security Scanning",
+    "Health Score Calculation",
+    "Smart Code Suggestions",
+    "Repository Comparison",
+    "Issue Filtering by Language & Difficulty",
+    "PDF Export",
+    "AI Chatbot Q&A"
+  ]
 }

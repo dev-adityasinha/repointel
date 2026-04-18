@@ -59,7 +59,7 @@ export default function App() {
     try {
       let owner = "";
       let repo = "";
-      const cleanUrl = repoUrl.trim().replace(/\/$/, "");
+      const cleanUrl = repoUrl.trim().replace(/\/$/, "").replace(/\.git$/, "");
       
       if (cleanUrl.includes("github.com/")) {
         const parts = cleanUrl.split("github.com/")[1].split("/");
@@ -183,32 +183,36 @@ export default function App() {
             <button
               onClick={() => setSearchOpen(true)}
               title="Search & Trending"
-              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all"
+              className="px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all flex items-center gap-2 text-sm font-medium whitespace-nowrap"
             >
-              <TrendingUp className="w-6 h-6" />
+              <TrendingUp className="w-5 h-5" />
+              <span className="hidden sm:inline">Trending</span>
             </button>
             <button
               onClick={() => setComparisonOpen(true)}
               title="Compare Repositories"
-              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all"
+              className="px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] transition-all flex items-center gap-2 text-sm font-medium whitespace-nowrap"
             >
-              <GitCompare className="w-6 h-6" />
+              <GitCompare className="w-5 h-5" />
+              <span className="hidden sm:inline">Compare</span>
             </button>
             <button
               onClick={handleExportPDF}
               title="Export to PDF"
               disabled={!data || pdfLoading}
-              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm font-medium whitespace-nowrap"
             >
-              <Download className="w-6 h-6" />
+              <Download className="w-5 h-5" />
+              <span className="hidden sm:inline">{pdfLoading ? "Exporting..." : "Export"}</span>
             </button>
             <button
               onClick={() => setChatbotOpen(!chatbotOpen)}
               title="Chat with AI"
               disabled={!data}
-              className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="px-3 py-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm font-medium whitespace-nowrap"
             >
-              <MessageCircle className="w-6 h-6" />
+              <MessageCircle className="w-5 h-5" />
+              <span className="hidden sm:inline">Chat AI</span>
             </button>
           </div>
         </header>
@@ -503,7 +507,7 @@ function IssueTrackerTab({ data }: { data: AppData }) {
       {/* Issues Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <IssueSection issues={data.issues} />
+          <IssueSection issues={data.issues} languages={data.languages} analysis={data.analysis} />
         </div>
         <div>
           <IssueDistributionChart issues={data.issues} />
@@ -627,8 +631,16 @@ function Checklist({ contents }: { contents: string[] }) {
   );
 }
 
-function IssueSection({ issues }: { issues: Issue[] }) {
+function IssueSection({ issues, languages, analysis }: { issues: Issue[], languages: Record<string, number>, analysis: RepoAnalysis }) {
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Set<string>>(new Set());
+
+  // Get all available skills based on languages and analysis
+  const allSkills = getSkillsFromTechStack(languages, analysis);
+  
+  // Difficulty levels
+  const difficultyLevels = ["Easy", "Medium", "Hard"];
 
   // Extract all unique labels with counts
   const labelCounts = new Map<string, { color: string; count: number }>();
@@ -642,12 +654,28 @@ function IssueSection({ issues }: { issues: Issue[] }) {
   const sortedLabels = Array.from(labelCounts.entries())
     .sort((a, b) => b[1].count - a[1].count);
 
-  // Filter issues based on selected labels
-  const filteredIssues = selectedLabels.size === 0 
-    ? issues 
-    : issues.filter(issue => 
-        issue.labels.some(label => selectedLabels.has(label.name))
-      );
+  // Filter issues based on labels, skills, and difficulty
+  const filteredIssues = issues.filter(issue => {
+    // Check label filters
+    if (selectedLabels.size > 0) {
+      const hasSelectedLabel = issue.labels.some(label => selectedLabels.has(label.name));
+      if (!hasSelectedLabel) return false;
+    }
+
+    // Check difficulty filter
+    if (selectedDifficulty.size > 0) {
+      const issueDifficulty = getIssueDifficulty(issue);
+      if (!selectedDifficulty.has(issueDifficulty)) return false;
+    }
+
+    // Check language filter - if languages are selected, issue must be related to selected languages
+    if (selectedSkills.size > 0) {
+      const issueRelevance = getIssueSkillRelevance(issue, selectedSkills);
+      if (!issueRelevance) return false;
+    }
+
+    return true;
+  });
 
   const toggleLabel = (labelName: string) => {
     const newSelected = new Set(selectedLabels);
@@ -659,14 +687,97 @@ function IssueSection({ issues }: { issues: Issue[] }) {
     setSelectedLabels(newSelected);
   };
 
+  const toggleSkill = (skill: string) => {
+    const newSelected = new Set(selectedSkills);
+    if (newSelected.has(skill)) {
+      newSelected.delete(skill);
+    } else {
+      newSelected.add(skill);
+    }
+    setSelectedSkills(newSelected);
+  };
+
+  const toggleDifficulty = (difficulty: string) => {
+    const newSelected = new Set(selectedDifficulty);
+    if (newSelected.has(difficulty)) {
+      newSelected.delete(difficulty);
+    } else {
+      newSelected.add(difficulty);
+    }
+    setSelectedDifficulty(newSelected);
+  };
+
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
       <div className="mb-4">
         <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-4">Issue Explorer</div>
         
+        {/* Filter by Skills Section */}
+        <div className="mb-4">
+          <div className="text-xs text-[var(--text-muted)] font-medium mb-2 flex items-center gap-2">
+            <span>💻 Filter by Languages</span>
+            <span className="text-[0.65rem] bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-0.5 rounded-full">TECH STACK BASED</span>
+          </div>
+          <div className="flex flex-wrap gap-2 bg-[var(--bg)] p-3 rounded-lg border border-[var(--border)]">
+            {allSkills.length > 0 ? (
+              allSkills.map(skill => {
+                const isSelected = selectedSkills.has(skill);
+                return (
+                  <button
+                    key={skill}
+                    onClick={() => toggleSkill(skill)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all border-2",
+                      isSelected 
+                        ? "border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]" 
+                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--accent)]/50"
+                    )}
+                  >
+                    {skill}
+                  </button>
+                );
+              })
+            ) : (
+              <span className="text-xs text-[var(--text-muted)] italic">No languages detected for this repository</span>
+            )}
+          </div>
+        </div>
+
+        {/* Filter by Difficulty Section */}
+        <div className="mb-4">
+          <div className="text-xs text-[var(--text-muted)] font-medium mb-2">📊 Filter by Difficulty</div>
+          <div className="flex flex-wrap gap-2">
+            {difficultyLevels.map(difficulty => {
+              const isSelected = selectedDifficulty.has(difficulty);
+              const count = issues.filter(i => getIssueDifficulty(i) === difficulty).length;
+              const bgColor = 
+                difficulty === "Easy" ? "bg-green-500" :
+                difficulty === "Medium" ? "bg-amber-500" :
+                "bg-red-500";
+              
+              return (
+                <button
+                  key={difficulty}
+                  onClick={() => toggleDifficulty(difficulty)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all border-2 flex items-center gap-1.5",
+                    isSelected 
+                      ? `border-current bg-${difficulty === "Easy" ? "green" : difficulty === "Medium" ? "amber" : "red"}-500/20` 
+                      : "border-[var(--border)] bg-[var(--bg)] text-[var(--text-muted)] hover:border-[var(--border-hover)]"
+                  )}
+                >
+                  <span className={cn("w-2 h-2 rounded-full", bgColor)}></span>
+                  {difficulty}
+                  <span className="text-xs opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Filter Labels Section */}
         <div className="mb-4">
-          <div className="text-xs text-[var(--text-muted)] font-medium mb-2">Filter by label:</div>
+          <div className="text-xs text-[var(--text-muted)] font-medium mb-2">🏷️ Filter by label:</div>
           <div className="flex flex-wrap gap-2">
             {sortedLabels.map(([labelName, { color, count }]) => {
               const isSelected = selectedLabels.has(labelName);
@@ -690,16 +801,20 @@ function IssueSection({ issues }: { issues: Issue[] }) {
           </div>
           
           {/* Clear filters button */}
-          {selectedLabels.size > 0 && (
+          {(selectedLabels.size > 0 || selectedSkills.size > 0 || selectedDifficulty.size > 0) && (
             <div className="mt-3 flex items-center gap-2">
               <button
-                onClick={() => setSelectedLabels(new Set())}
+                onClick={() => {
+                  setSelectedLabels(new Set());
+                  setSelectedSkills(new Set());
+                  setSelectedDifficulty(new Set());
+                }}
                 className="text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] font-medium transition-colors"
               >
                 Clear all filters
               </button>
               <span className="text-xs text-[var(--text-muted)]">
-                ({selectedLabels.size} filter{selectedLabels.size !== 1 ? "s" : ""} applied)
+                ({selectedLabels.size + selectedSkills.size + selectedDifficulty.size} filter{selectedLabels.size + selectedSkills.size + selectedDifficulty.size !== 1 ? "s" : ""} applied)
               </span>
             </div>
           )}
@@ -710,52 +825,142 @@ function IssueSection({ issues }: { issues: Issue[] }) {
       <div className="flex flex-col gap-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
         {filteredIssues.length === 0 ? (
           <div className="text-center py-8 text-[var(--text-muted)] text-sm">
-            {selectedLabels.size > 0 
-              ? "No issues found matching the selected filter" + (selectedLabels.size > 1 ? "s" : "") + "."
+            {selectedLabels.size > 0 || selectedSkills.size > 0 || selectedDifficulty.size > 0
+              ? "No issues found matching the selected filter" + (selectedLabels.size + selectedSkills.size + selectedDifficulty.size > 1 ? "s" : "") + "."
               : "No issues available."}
           </div>
         ) : (
-          filteredIssues.map(issue => (
-            <a
-              key={issue.id}
-              href={issue.html_url}
-              target="_blank"
-              rel="noreferrer"
-              className="p-3 bg-[var(--bg)] rounded-lg text-sm block hover:bg-[var(--surface-hover)] transition-colors border border-transparent hover:border-[var(--border)]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <strong className="text-[var(--text-main)] mr-1">#{issue.number}</strong> 
-                  <span className="text-[var(--text-main)]">{issue.title}</span>
-                  {issue.labels.length > 0 && (
-                    <span className="inline-flex flex-wrap gap-1.5 ml-2">
-                      {issue.labels.map(label => {
-                        const isSelected = selectedLabels.has(label.name);
-                        const isEasy = label.name.toLowerCase().includes("easy") || label.name.toLowerCase().includes("good first issue");
-                        const isHard = label.name.toLowerCase().includes("hard") || label.name.toLowerCase().includes("complex");
-                        return (
-                          <span
-                            key={label.name}
-                            className={cn(
-                              "inline-block px-2 py-0.5 rounded text-[0.7rem] font-semibold",
-                              isSelected ? "ring-1 ring-[#" + label.color + "]" : "",
-                              isEasy ? "bg-[var(--tag-easy-bg)] text-[var(--tag-easy-text)]" :
-                              isHard ? "bg-[var(--tag-hard-bg)] text-[var(--tag-hard-text)]" :
-                              "bg-[var(--border)] text-[var(--text-muted)]"
-                            )}
-                          >
-                            {label.name}
-                          </span>
-                        );
-                      })}
-                    </span>
-                  )}
+          filteredIssues.map(issue => {
+            const difficulty = getIssueDifficulty(issue);
+            const difficultyColor = 
+              difficulty === "Easy" ? "text-green-600 bg-green-100 dark:bg-green-900/30" :
+              difficulty === "Medium" ? "text-amber-600 bg-amber-100 dark:bg-amber-900/30" :
+              "text-red-600 bg-red-100 dark:bg-red-900/30";
+
+            return (
+              <a
+                key={issue.id}
+                href={issue.html_url}
+                target="_blank"
+                rel="noreferrer"
+                className="p-3 bg-[var(--bg)] rounded-lg text-sm block hover:bg-[var(--surface-hover)] transition-colors border border-transparent hover:border-[var(--border)]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <strong className="text-[var(--text-main)]">#{issue.number}</strong>
+                      <span className={cn("px-2 py-0.5 rounded text-[0.65rem] font-bold", difficultyColor)}>
+                        {difficulty}
+                      </span>
+                    </div>
+                    <span className="text-[var(--text-main)]">{issue.title}</span>
+                    {issue.labels.length > 0 && (
+                      <span className="inline-flex flex-wrap gap-1.5 ml-2">
+                        {issue.labels.map(label => {
+                          const isSelected = selectedLabels.has(label.name);
+                          const isEasy = label.name.toLowerCase().includes("easy") || label.name.toLowerCase().includes("good first issue");
+                          const isHard = label.name.toLowerCase().includes("hard") || label.name.toLowerCase().includes("complex");
+                          return (
+                            <span
+                              key={label.name}
+                              className={cn(
+                                "inline-block px-2 py-0.5 rounded text-[0.7rem] font-semibold",
+                                isSelected ? "ring-1 ring-[#" + label.color + "]" : "",
+                                isEasy ? "bg-[var(--tag-easy-bg)] text-[var(--tag-easy-text)]" :
+                                isHard ? "bg-[var(--tag-hard-bg)] text-[var(--tag-hard-text)]" :
+                                "bg-[var(--border)] text-[var(--text-muted)]"
+                              )}
+                            >
+                              {label.name}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </a>
-          ))
+              </a>
+            );
+          })
         )}
       </div>
     </div>
   );
+}
+
+// Helper functions for issue filtering and classification
+function getSkillsFromTechStack(languages: Record<string, number>, analysis: RepoAnalysis): string[] {
+  // Simply return the languages from the tech stack
+  // Sort by percentage (higher to lower)
+  const sortedLanguages = Object.entries(languages)
+    .sort((a, b) => b[1] - a[1])
+    .map(([lang]) => lang);
+  
+  return sortedLanguages;
+}
+
+function getIssueDifficulty(issue: Issue): string {
+  const title = issue.title.toLowerCase();
+  const labels = issue.labels.map(l => l.name.toLowerCase());
+  
+  // Check for hard indicators
+  const hardKeywords = ["hard", "complex", "refactor", "architecture", "optimization"];
+  if (hardKeywords.some(kw => title.includes(kw) || labels.some(l => l.includes(kw)))) {
+    return "Hard";
+  }
+  
+  // Check for easy indicators  
+  const easyKeywords = ["easy", "good first issue", "beginner", "simple", "typo", "documentation"];
+  if (easyKeywords.some(kw => title.includes(kw) || labels.some(l => l.includes(kw)))) {
+    return "Easy";
+  }
+  
+  // Check for medium indicators
+  const mediumKeywords = ["feature", "bug", "improve", "enhance", "fix"];
+  if (mediumKeywords.some(kw => title.includes(kw) || labels.some(l => l.includes(kw)))) {
+    return "Medium";
+  }
+  
+  // Default to Medium
+  return "Medium";
+}
+
+function getIssueSkillRelevance(issue: Issue, selectedLanguages: Set<string>): boolean {
+  const titleLower = issue.title.toLowerCase();
+  const labelsLower = issue.labels.map(l => l.name.toLowerCase()).join(" ");
+  const contentLower = (titleLower + " " + labelsLower).toLowerCase();
+  
+  // Language keywords map - what keywords would indicate an issue is related to a language
+  const languageKeywords: Record<string, string[]> = {
+    "JavaScript": ["javascript", "js", "node", "react", "vue", "angular", "express", "npm", "webpack", "babel"],
+    "TypeScript": ["typescript", "ts", ".ts", "interface", "generic", "type", "decorator"],
+    "Python": ["python", "py", "django", "flask", "pandas", "numpy", "tensorflow", "pytorch"],
+    "Java": ["java", "spring", "maven", "gradle", "junit", "servlet"],
+    "C++": ["c++", "cpp", "cmake", "boost", "stl", "pointer"],
+    "C#": [".net", "csharp", "c#", "unity", "asp", "linq"],
+    "Go": ["go", "golang", "goroutine", "gin", "gorm"],
+    "Rust": ["rust", "cargo", "tokio", "actix", "wasm"],
+    "PHP": ["php", "laravel", "symfony", "wordpress", "composer"],
+    "Ruby": ["ruby", "rails", "rack", "sinatra", "erb"],
+    "Swift": ["swift", "ios", "macos", "objective-c", "xcode", "cocoa"],
+    "Kotlin": ["kotlin", "android", "kotlin/js", "coroutine"],
+    "CSS": ["css", "scss", "sass", "tailwind", "bootstrap", "styling", "style", "stylesheet"],
+    "HTML": ["html", "markup", "dom", "semantic"],
+    "SQL": ["sql", "database", "query", "postgres", "mysql", "sqlite", "mongodb"],
+    "Vue": ["vue", "vuex", "composable"],
+    "React": ["react", "jsx", "tsx", "hooks", "redux", "component"],
+    "Angular": ["angular", "typescript"],
+    "Docker": ["docker", "dockerfile", "container"],
+    "Git": ["git", "github", "gitlab", "merge", "commit"],
+  };
+  
+  // Check if issue content matches any selected language
+  for (const language of selectedLanguages) {
+    const keywords = languageKeywords[language] || [];
+    if (keywords.some(kw => contentLower.includes(kw))) {
+      return true;
+    }
+  }
+  
+  return selectedLanguages.size === 0; // If no languages selected, show all
 }

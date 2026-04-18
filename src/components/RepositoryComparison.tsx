@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Plus, AlertCircle, Check } from "lucide-react";
+import { X, Plus, AlertCircle, Check, Trash2 } from "lucide-react";
 import { fetchRepoInfo, fetchRepoLanguages, RepoInfo } from "../services/github";
 import { analyzeRepo, RepoAnalysis } from "../services/gemini";
 import { fetchReadme } from "../services/github";
@@ -9,6 +9,7 @@ interface ComparisonRepo {
   info: RepoInfo;
   languages: Record<string, number>;
   analysis: RepoAnalysis;
+  rating?: number;
 }
 
 interface RepositoryComparisonProps {
@@ -17,15 +18,13 @@ interface RepositoryComparisonProps {
 }
 
 export default function RepositoryComparison({ isOpen, onClose }: RepositoryComparisonProps) {
-  const [repo1Input, setRepo1Input] = useState("");
-  const [repo2Input, setRepo2Input] = useState("");
-  const [repo1, setRepo1] = useState<ComparisonRepo | null>(null);
-  const [repo2, setRepo2] = useState<ComparisonRepo | null>(null);
+  const [repoInputs, setRepoInputs] = useState<string[]>(["", ""]);
+  const [repos, setRepos] = useState<(ComparisonRepo | null)[]>([null, null]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const parseRepository = async (input: string): Promise<ComparisonRepo | null> => {
-    const cleanUrl = input.trim().replace(/\/$/, "");
+    const cleanUrl = input.trim().replace(/\/$/, "").replace(/\.git$/, "");
     let owner = "";
     let repo = "";
 
@@ -51,21 +50,18 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
 
   const handleCompare = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repo1Input.trim() || !repo2Input.trim()) return;
+    const validInputs = repoInputs.filter(input => input.trim());
+    if (validInputs.length < 2) return;
 
     setLoading(true);
     setError("");
-    setRepo1(null);
-    setRepo2(null);
+    setRepos(repoInputs.map(() => null));
 
     try {
-      const [repoA, repoB] = await Promise.all([
-        parseRepository(repo1Input),
-        parseRepository(repo2Input),
-      ]);
-
-      setRepo1(repoA);
-      setRepo2(repoB);
+      const results = await Promise.all(
+        repoInputs.map(input => input.trim() ? parseRepository(input) : null)
+      );
+      setRepos(results);
     } catch (err: any) {
       setError(err.message || "Failed to compare repositories");
     } finally {
@@ -73,11 +69,27 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
     }
   };
 
+  const addRepository = () => {
+    setRepoInputs([...repoInputs, ""]);
+    setRepos([...repos, null]);
+  };
+
+  const removeRepository = (index: number) => {
+    if (repoInputs.length > 2) {
+      setRepoInputs(repoInputs.filter((_, i) => i !== index));
+      setRepos(repos.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateRepoInput = (index: number, value: string) => {
+    const newInputs = [...repoInputs];
+    newInputs[index] = value;
+    setRepoInputs(newInputs);
+  };
+
   const resetComparison = () => {
-    setRepo1(null);
-    setRepo2(null);
-    setRepo1Input("");
-    setRepo2Input("");
+    setRepoInputs(["", ""]);
+    setRepos([null, null]);
     setError("");
   };
 
@@ -102,52 +114,59 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
           {/* Input Form */}
           <form onSubmit={handleCompare} className="mb-8">
             <div className="mb-4">
-              <label className="block text-sm font-medium text-[var(--text-main)] mb-2">
-                Compare Two Repositories
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-[var(--text-main)]">
+                  Compare Repositories ({repoInputs.length})
+                </label>
+                {repoInputs.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={addRepository}
+                    className="px-3 py-1 text-xs bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Repository
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-[var(--text-muted)] mb-4">
-                Enter repository names or GitHub URLs to compare code quality. Great for comparing assignments!
+                Enter repository names or GitHub URLs to compare code quality. You can compare up to 5 repositories!
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] uppercase mb-2 block">
-                  Repository 1
-                </label>
-                <input
-                  type="text"
-                  value={repo1Input}
-                  onChange={(e) => setRepo1Input(e.target.value)}
-                  placeholder="e.g., friend1/assignment"
-                  className="w-full px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm"
-                />
-                {repo1 && (
-                  <div className="mt-2 text-xs text-[var(--success)] flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Loaded: {repo1.info.full_name}
+            <div className="space-y-3 mb-4">
+              {repoInputs.map((input, index) => (
+                <div key={index} className="flex gap-2 items-start">
+                  <div className="flex-1">
+                    <label className="text-xs font-semibold text-[var(--text-muted)] uppercase mb-2 block">
+                      Repository {index + 1}
+                    </label>
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => updateRepoInput(index, e.target.value)}
+                      placeholder="e.g., friend1/assignment or https://github.com/friend1/assignment"
+                      className="w-full px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm"
+                    />
+                    {repos[index] && (
+                      <div className="mt-2 text-xs text-[var(--success)] flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Loaded: {repos[index]!.info.owner.login}/{repos[index]!.info.name}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] uppercase mb-2 block">
-                  Repository 2
-                </label>
-                <input
-                  type="text"
-                  value={repo2Input}
-                  onChange={(e) => setRepo2Input(e.target.value)}
-                  placeholder="e.g., friend2/assignment"
-                  className="w-full px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] outline-none text-sm"
-                />
-                {repo2 && (
-                  <div className="mt-2 text-xs text-[var(--success)] flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Loaded: {repo2.info.full_name}
-                  </div>
-                )}
-              </div>
+                  {repoInputs.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRepository(index)}
+                      className="mt-7 p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Remove this repository"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
 
             {error && (
@@ -160,7 +179,7 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || repoInputs.filter(i => i.trim()).length < 2}
                 className="px-6 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {loading ? (
@@ -175,7 +194,7 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
                   </>
                 )}
               </button>
-              {(repo1 || repo2) && (
+              {repos.some(r => r) && (
                 <button
                   type="button"
                   onClick={resetComparison}
@@ -188,147 +207,149 @@ export default function RepositoryComparison({ isOpen, onClose }: RepositoryComp
           </form>
 
           {/* Comparison Results */}
-          {repo1 && repo2 && (
-            <div className="space-y-6">
-              {/* Winner Badge */}
-              <div className="bg-gradient-to-r from-[var(--accent)]/10 to-transparent border border-[var(--accent)]/30 rounded-xl p-6 mb-8">
-                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">🏆 Comparison Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div className="p-3 bg-[var(--surface)] rounded-lg">
-                    <div className="text-[var(--text-muted)] text-xs mb-1">Most Popular</div>
-                    <div className="font-bold text-[var(--accent)]">
-                      {repo1.info.stargazers_count > repo2.info.stargazers_count
-                        ? repo1.info.owner.login
-                        : repo2.info.owner.login}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)] mt-1">
-                      ⭐ {Math.max(repo1.info.stargazers_count, repo2.info.stargazers_count).toLocaleString()} stars
-                    </div>
-                  </div>
-                  <div className="p-3 bg-[var(--surface)] rounded-lg">
-                    <div className="text-[var(--text-muted)] text-xs mb-1">Better Code Quality</div>
-                    <div className="font-bold text-[var(--accent)]">
-                      {repo1.analysis.complexityScores.readability > repo2.analysis.complexityScores.readability
-                        ? repo1.info.owner.login
-                        : repo2.info.owner.login}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)] mt-1">
-                      🎯 {Math.max(repo1.analysis.complexityScores.readability, repo2.analysis.complexityScores.readability)}/10
-                    </div>
-                  </div>
-                  <div className="p-3 bg-[var(--surface)] rounded-lg">
-                    <div className="text-[var(--text-muted)] text-xs mb-1">Better Modularity</div>
-                    <div className="font-bold text-[var(--accent)]">
-                      {repo1.analysis.complexityScores.modularity > repo2.analysis.complexityScores.modularity
-                        ? repo1.info.owner.login
-                        : repo2.info.owner.login}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)] mt-1">
-                      🏗️ {Math.max(repo1.analysis.complexityScores.modularity, repo2.analysis.complexityScores.modularity)}/10
-                    </div>
+          {repos.every(r => r !== null) && repos.length > 0 && (() => {
+            const loadedRepos = repos.filter((r): r is ComparisonRepo => r !== null);
+            return (
+              <div className="space-y-6">
+                {/* Winner Badge - Code Quality Focused */}
+                <div className="bg-gradient-to-r from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded-xl p-6 mb-8">
+                  <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">🏆 Code Quality Winners</h3>
+                  <div className={cn("grid gap-4 text-sm", loadedRepos.length <= 2 ? "grid-cols-1 md:grid-cols-4" : "grid-cols-2 md:grid-cols-4")}>
+                    {/* Best Overall Code */}
+                    {(() => {
+                      const topRepo = loadedRepos.reduce((top, current) => 
+                        calculateOverallQuality(current.analysis) > calculateOverallQuality(top.analysis) ? current : top
+                      );
+                      return (
+                        <div className="p-3 bg-[var(--surface)] rounded-lg border-2 border-yellow-500">
+                          <div className="text-[var(--text-muted)] text-xs mb-1">🎯 Best Overall Code</div>
+                          <div className="font-bold text-[var(--accent)]">{topRepo.info.owner.login}</div>
+                          <div className="text-xs text-[var(--text-muted)] mt-1">{calculateOverallQuality(topRepo.analysis)}/10</div>
+                        </div>
+                      );
+                    })()}
+                    {/* Best Architecture */}
+                    {(() => {
+                      const topRepo = loadedRepos.reduce((top, current) => 
+                        current.analysis.complexityScores.architecture > top.analysis.complexityScores.architecture ? current : top
+                      );
+                      return (
+                        <div className="p-3 bg-[var(--surface)] rounded-lg">
+                          <div className="text-[var(--text-muted)] text-xs mb-1">🏛️ Best Architecture</div>
+                          <div className="font-bold text-[var(--accent)]">{topRepo.info.owner.login}</div>
+                          <div className="text-xs text-[var(--text-muted)] mt-1">{topRepo.analysis.complexityScores.architecture}/10</div>
+                        </div>
+                      );
+                    })()}
+                    {/* Best Logic/Modularity */}
+                    {(() => {
+                      const topRepo = loadedRepos.reduce((top, current) => 
+                        current.analysis.complexityScores.modularity > top.analysis.complexityScores.modularity ? current : top
+                      );
+                      return (
+                        <div className="p-3 bg-[var(--surface)] rounded-lg">
+                          <div className="text-[var(--text-muted)] text-xs mb-1">🧩 Best Logic Structure</div>
+                          <div className="font-bold text-[var(--accent)]">{topRepo.info.owner.login}</div>
+                          <div className="text-xs text-[var(--text-muted)] mt-1">{topRepo.analysis.complexityScores.modularity}/10</div>
+                        </div>
+                      );
+                    })()}
+                    {/* Most Testable */}
+                    {(() => {
+                      const topRepo = loadedRepos.reduce((top, current) => 
+                        current.analysis.complexityScores.testability > top.analysis.complexityScores.testability ? current : top
+                      );
+                      return (
+                        <div className="p-3 bg-[var(--surface)] rounded-lg">
+                          <div className="text-[var(--text-muted)] text-xs mb-1">🧪 Most Testable</div>
+                          <div className="font-bold text-[var(--accent)]">{topRepo.info.owner.login}</div>
+                          <div className="text-xs text-[var(--text-muted)] mt-1">{topRepo.analysis.complexityScores.testability}/10</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
+                {/* Comparison Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)]">
+                        <th className="text-left py-3 px-4 font-semibold text-[var(--text-muted)] sticky left-0 bg-[var(--surface)] z-10">Metric</th>
+                        {loadedRepos.map((repo, idx) => (
+                          <th key={idx} className="text-left py-3 px-4 font-semibold text-[var(--text-main)]">
+                            <div className="flex items-center gap-2">
+                              <img src={repo.info.owner.avatar_url} alt={repo.info.owner.login} className="w-6 h-6 rounded-full" />
+                              <div>
+                                <div className="font-semibold text-sm">{repo.info.owner.login}/{repo.info.name}</div>
+                                <div className="text-xs text-[var(--text-muted)]">{Object.keys(repo.languages)[0] || "Mixed"}</div>
+                              </div>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
+                        <td colSpan={loadedRepos.length + 1} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">Overall Quality</td>
+                      </tr>
+                      {renderMultiScoreRowWithDesc(loadedRepos, "📊 Overall Code Quality", (r) => calculateOverallQuality(r.analysis), "Composite score of all metrics")}
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
+                        <td colSpan={loadedRepos.length + 1} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">Code Techniques & Design</td>
+                      </tr>
+                      {renderMultiScoreRowWithDesc(loadedRepos, "🎯 Readability", (r) => r.analysis.complexityScores.readability, "How easy the code is to understand")}
+                      {renderMultiScoreRowWithDesc(loadedRepos, "🏛️ Architecture", (r) => r.analysis.complexityScores.architecture, "Overall system design quality")}
+                      {renderMultiScoreRowWithDesc(loadedRepos, "🧩 Modularity/Logic", (r) => r.analysis.complexityScores.modularity, "Code reusability and separation")}
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
+                        <td colSpan={loadedRepos.length + 1} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">Testing & Reliability</td>
+                      </tr>
+                      {renderMultiScoreRowWithDesc(loadedRepos, "🧪 Testability", (r) => r.analysis.complexityScores.testability, "How well the code can be tested")}
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
+                        <td colSpan={loadedRepos.length + 1} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">Documentation & Maintenance</td>
+                      </tr>
+                      {renderMultiScoreRowWithDesc(loadedRepos, "📚 Documentation", (r) => r.analysis.complexityScores.documentation, "Code comments and docs quality")}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Strengths Grid */}
+                <div className={cn("grid gap-6 mt-8", loadedRepos.length === 2 ? "grid-cols-1 md:grid-cols-2" : loadedRepos.length === 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-4")}>
+                  {loadedRepos.map((repo, idx) => (
+                    <div key={idx} className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4">
+                      <h4 className="font-bold text-[var(--text-main)] mb-3 break-words text-sm">{repo.info.owner.login}'s Strengths</h4>
+                      <ul className="space-y-2">
+                        {repo.analysis.strengths.map((strength, i) => (
+                          <li key={i} className="text-xs text-[var(--text-main)] flex items-start gap-2">
+                            <span className="text-green-600 mt-0.5 flex-shrink-0">✓</span>
+                            <span>{strength}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                {/* Improvements Grid */}
+                <div className={cn("grid gap-6", loadedRepos.length === 2 ? "grid-cols-1 md:grid-cols-2" : loadedRepos.length === 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-4")}>
+                  {loadedRepos.map((repo, idx) => (
+                    <div key={idx} className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4">
+                      <h4 className="font-bold text-[var(--text-main)] mb-3 break-words text-sm">{repo.info.owner.login}'s Areas to Improve</h4>
+                      <ul className="space-y-2">
+                        {repo.analysis.weaknesses.map((weakness, i) => (
+                          <li key={i} className="text-xs text-[var(--text-main)] flex items-start gap-2">
+                            <span className="text-amber-600 mt-0.5 flex-shrink-0">→</span>
+                            <span>{weakness}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               </div>
+            );
+          })()}
 
-              {/* Comparison Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-3 px-4 font-semibold text-[var(--text-muted)]">Metric</th>
-                      <th className="text-left py-3 px-4 font-semibold text-[var(--text-main)]">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={repo1.info.owner.avatar_url}
-                            alt={repo1.info.owner.login}
-                            className="w-6 h-6 rounded-full"
-                          />
-                          <div>
-                            <div className="font-semibold">{repo1.info.owner.login}/{repo1.info.name}</div>
-                            <div className="text-xs text-[var(--text-muted)]">{Object.keys(repo1.languages)[0] || "Mixed"}</div>
-                          </div>
-                        </div>
-                      </th>
-                      <th className="text-left py-3 px-4 font-semibold text-[var(--text-main)]">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={repo2.info.owner.avatar_url}
-                            alt={repo2.info.owner.login}
-                            className="w-6 h-6 rounded-full"
-                          />
-                          <div>
-                            <div className="font-semibold">{repo2.info.owner.login}/{repo2.info.name}</div>
-                            <div className="text-xs text-[var(--text-muted)]">{Object.keys(repo2.languages)[0] || "Mixed"}</div>
-                          </div>
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Basic Stats */}
-                    <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
-                      <td colSpan={3} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">
-                        Popularity Metrics
-                      </td>
-                    </tr>
-                    <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4 font-semibold text-[var(--text-muted)]">⭐ Stars</td>
-                      <td className={cn("py-3 px-4", repo1.info.stargazers_count >= repo2.info.stargazers_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo1.info.stargazers_count.toLocaleString()}</div>
-                      </td>
-                      <td className={cn("py-3 px-4", repo2.info.stargazers_count >= repo1.info.stargazers_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo2.info.stargazers_count.toLocaleString()}</div>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4 font-semibold text-[var(--text-muted)]">🔀 Forks</td>
-                      <td className={cn("py-3 px-4", repo1.info.forks_count >= repo2.info.forks_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo1.info.forks_count.toLocaleString()}</div>
-                      </td>
-                      <td className={cn("py-3 px-4", repo2.info.forks_count >= repo1.info.forks_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo2.info.forks_count.toLocaleString()}</div>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4 font-semibold text-[var(--text-muted)]">👁️ Watchers</td>
-                      <td className={cn("py-3 px-4", repo1.info.watchers_count >= repo2.info.watchers_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo1.info.watchers_count.toLocaleString()}</div>
-                      </td>
-                      <td className={cn("py-3 px-4", repo2.info.watchers_count >= repo1.info.watchers_count ? "bg-[var(--accent)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo2.info.watchers_count.toLocaleString()}</div>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4 font-semibold text-[var(--text-muted)]">📋 Open Issues</td>
-                      <td className={cn("py-3 px-4", repo1.info.open_issues_count <= repo2.info.open_issues_count ? "bg-[var(--success)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo1.info.open_issues_count}</div>
-                      </td>
-                      <td className={cn("py-3 px-4", repo2.info.open_issues_count <= repo1.info.open_issues_count ? "bg-[var(--success)]/10" : "")}>
-                        <div className="font-bold text-[var(--text-main)]">{repo2.info.open_issues_count}</div>
-                      </td>
-                    </tr>
-
-                    {/* Code Quality */}
-                    <tr className="border-b border-[var(--border)] bg-[var(--bg)]">
-                      <td colSpan={3} className="py-2 px-4 font-semibold text-[var(--text-muted)] text-xs uppercase">
-                        Code Quality Metrics
-                      </td>
-                    </tr>
-                    {renderScoreRow("🎯 Readability", repo1.analysis.complexityScores.readability, repo2.analysis.complexityScores.readability)}
-                    {renderScoreRow("🏗️ Modularity", repo1.analysis.complexityScores.modularity, repo2.analysis.complexityScores.modularity)}
-                    {renderScoreRow("🧪 Testability", repo1.analysis.complexityScores.testability, repo2.analysis.complexityScores.testability)}
-                    {renderScoreRow("📚 Documentation", repo1.analysis.complexityScores.documentation, repo2.analysis.complexityScores.documentation)}
-                    {renderScoreRow("🏛️ Architecture", repo1.analysis.complexityScores.architecture, repo2.analysis.complexityScores.architecture)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {!repo1 && !repo2 && !loading && (
+          {!repos.every(r => r !== null) && !loading && repos.every(r => r === null) && (
             <div className="text-center py-12 text-[var(--text-muted)]">
-              <p className="text-sm">Enter two repository names or URLs above and click "Compare" to get started</p>
-              <p className="text-xs mt-2 opacity-60">Perfect for comparing assignments between friends!</p>
+              <p className="text-sm">Enter repository names or URLs above and click "Compare" to get started</p>
+              <p className="text-xs mt-2 opacity-60">Perfect for comparing assignments between friends! You can compare up to 5 repositories.</p>
             </div>
           )}
         </div>
@@ -364,5 +385,89 @@ function renderScoreRow(label: string, score1: number, score2: number) {
         </div>
       </td>
     </tr>
+  );
+}
+
+function renderMultiScoreRowWithDesc(
+  repos: ComparisonRepo[],
+  label: string,
+  scoreExtractor: (repo: ComparisonRepo) => number,
+  description: string
+) {
+  const scores = repos.map(scoreExtractor);
+  const maxScore = Math.max(...scores);
+
+  return (
+    <tr key={label} className="border-b border-[var(--border)]">
+      <td className="py-3 px-4 sticky left-0 bg-[var(--surface)] z-10">
+        <div>
+          <div className="font-semibold text-[var(--text-muted)]">{label}</div>
+          <div className="text-xs text-[var(--text-muted)] opacity-70 mt-1">{description}</div>
+        </div>
+      </td>
+      {repos.map((repo, idx) => {
+        const score = scores[idx];
+        const isMax = score === maxScore;
+        return (
+          <td key={idx} className={cn("py-3 px-4", isMax ? "bg-green-500/10 border-l-4 border-green-500" : "")}>
+            <div className="flex items-center gap-2">
+              <div className="w-24 h-2 bg-[var(--border)] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[var(--accent)]"
+                  style={{ width: `${(score / 10) * 100}%` }}
+                />
+              </div>
+              <span className="font-bold text-[var(--text-main)] w-12">{score}/10</span>
+            </div>
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
+function renderScoreRowWithDesc(label: string, score1: number, score2: number, description: string) {
+  return (
+    <tr key={label} className="border-b border-[var(--border)]">
+      <td className="py-3 px-4">
+        <div>
+          <div className="font-semibold text-[var(--text-muted)]">{label}</div>
+          <div className="text-xs text-[var(--text-muted)] opacity-70 mt-1">{description}</div>
+        </div>
+      </td>
+      <td className={cn("py-3 px-4", score1 >= score2 ? "bg-green-500/10 border-l-4 border-green-500" : "")}>
+        <div className="flex items-center gap-2">
+          <div className="w-24 h-2 bg-[var(--border)] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[var(--accent)]"
+              style={{ width: `${(score1 / 10) * 100}%` }}
+            />
+          </div>
+          <span className="font-bold text-[var(--text-main)] w-12">{score1}/10</span>
+        </div>
+      </td>
+      <td className={cn("py-3 px-4", score2 >= score1 ? "bg-green-500/10 border-l-4 border-green-500" : "")}>
+        <div className="flex items-center gap-2">
+          <div className="w-24 h-2 bg-[var(--border)] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[var(--accent)]"
+              style={{ width: `${(score2 / 10) * 100}%` }}
+            />
+          </div>
+          <span className="font-bold text-[var(--text-main)] w-12">{score2}/10</span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function calculateOverallQuality(analysis: RepoAnalysis): number {
+  return Math.round(
+    (analysis.complexityScores.readability +
+      analysis.complexityScores.modularity +
+      analysis.complexityScores.testability +
+      analysis.complexityScores.documentation +
+      analysis.complexityScores.architecture) /
+      5
   );
 }

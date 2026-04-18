@@ -76,7 +76,18 @@ export async function fetchRepoContents(owner: string, repo: string): Promise<st
     if (!res.ok) return [];
     const data = await res.json();
     if (Array.isArray(data)) {
-      return data.map((item: any) => item.name.toLowerCase());
+      // Filter out special directories and files to avoid errors
+      const excludedNames = new Set([
+        '.git', '.gitignore', '.github', '.gitattributes',
+        'node_modules', '.venv', 'venv', '__pycache__',
+        '.env', '.env.local', '.env.*.local',
+        '.DS_Store', 'Thumbs.db',
+        '.next', 'dist', 'build', 'out'
+      ]);
+      
+      return data
+        .map((item: any) => item.name.toLowerCase())
+        .filter((name: string) => !excludedNames.has(name));
     }
     return [];
   } catch {
